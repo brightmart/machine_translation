@@ -4,16 +4,21 @@ Baseline model of machine translation using deep learning with lstm,cnn,attentio
 Usage
 ----------------------------------------------------------------------------------------------
 #1. create a folder named 'data', and put sample data into this folder.
+
 #2. train:   python a1_seq2seq_attention_train.py 
+
 #3. predict: python a1_seq2seq_attention_predict.py
 
 (optional)
 #1. using pretrained word embedding:
+
 if you want to use pretrained word embedding, you can run following command to generate word embedding file using word2vec:44ee
 python a1_word2vec_train.py
 
 #2. test model with toy data:learn to output reverse sequence of itself.
+
 enable last line and run following command:
+
 python a1_seq2seq_attention_model.py
 
 Description:
@@ -63,3 +68,5 @@ V.Notices:
 #Preference
 ------------------------------------------------------------------------------------------------
 1.Neural Machine Translation by Jointly Learning to Align and Translate
+
+for any question or suggestion, you can contact brightmart@hotmail.com
