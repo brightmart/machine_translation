@@ -17,9 +17,9 @@ Usage
 if you want to use pretrained word embedding, you can run following command to generate word embedding file using word2vec:44ee
 python a1_word2vec_train.py
 
-#2. test model with toy data:learn to output reverse sequence of itself.
+#2. test model with toy data: learn to output reverse sequence of itself.
 
-enable last line and run following command:
+enable last line of a1_seq2seq_attention_model.py(that is to invoke test function) and run following command:
 
 python a1_seq2seq_attention_model.py
 
