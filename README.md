@@ -16,8 +16,8 @@ python a1_word2vec_train.py
 enable last line and run following command:
 python a1_seq2seq_attention_model.py
 
---------------------------------------------------------------------------------------------------
 Description:
+--------------------------------------------------------------------------------------------------
 Implementation seq2seq with attention derived from NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE
 
 I.Structure:
