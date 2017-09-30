@@ -23,6 +23,11 @@ enable last line of a1_seq2seq_attention_model.py(that is to invoke test functio
 
 python a1_seq2seq_attention_model.py
 
+What Dataset:
+---------------------------------------------------------------------------------------------
+In my experiment, i use dataset from <a href='http://challenger.ai/'>AI Challenger</a>, it has about 10 million pairs of training data, 8000 validation data, and 8000 testing data. translation direction is from english to chinese.
+
+
 Description:
 --------------------------------------------------------------------------------------------------
 Implementation seq2seq with attention derived from NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE
