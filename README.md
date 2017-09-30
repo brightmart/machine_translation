@@ -9,8 +9,8 @@ Usage
 
 #3. predict: python a1_seq2seq_attention_predict.py
 
-
-(optional)
+---------------------------------------
+(below is optional)
 
 #1. using pretrained word embedding:
 
