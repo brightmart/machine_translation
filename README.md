@@ -9,7 +9,9 @@ Usage
 
 #3. predict: python a1_seq2seq_attention_predict.py
 
+
 (optional)
+
 #1. using pretrained word embedding:
 
 if you want to use pretrained word embedding, you can run following command to generate word embedding file using word2vec:44ee
