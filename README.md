@@ -57,6 +57,7 @@ V.Notices:
 #TODO
 -----------------------------------------------------------------------------------------------
 1.Google Neural Machine Translation
+
 2.Convolutional Sequence to Sequence Learning
 
 #Preference
