@@ -1,4 +1,4 @@
-# machine_translation
+# Machine Translation
 Baseline model of machine translation using deep learning with lstm,cnn,attention,beam search and so on.
 
 Usage
