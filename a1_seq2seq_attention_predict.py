@@ -79,7 +79,7 @@ def get_label_using_logits(logits,predictions, vocab_cn_index2word, vocab_cn):
     if eos_index in selected_token_ids:
         eos_index = selected_token_ids.index(eos_index)
         selected_token_ids=selected_token_ids[0:eos_index]
-    output_sentence = "".join([vocab_cn_index2word[index] for index in selected_token_ids])  # ) #cn_vocab[output] TODO TODO
+    output_sentence = " ".join([vocab_cn_index2word[index] for index in selected_token_ids])  # ) #cn_vocab[output] TODO TODO
     return output_sentence
 if __name__ == "__main__":
     tf.app.run()
