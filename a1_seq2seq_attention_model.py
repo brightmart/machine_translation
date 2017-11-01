@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow.contrib as tf_contrib
 import random
 import copy
+import os
 from a1_seq2seq import rnn_decoder_with_attention,extract_argmax_and_embed
 
 class seq2seq_attention_model:
@@ -20,7 +21,7 @@ class seq2seq_attention_model:
         self.embed_size = embed_size
         self.is_training = is_training
         self.learning_rate = tf.Variable(learning_rate, trainable=False, name="learning_rate")
-        self.learning_rate_decay_half_op = tf.assign(self.learning_rate, self.learning_rate * 0.5)
+        self.learning_rate_decay_half_op = tf.assign(self.learning_rate, self.learning_rate * 0.70) #0.5
         self.initializer = initializer
         self.decoder_sent_length=decoder_sent_length
         self.hidden_size = hidden_size
@@ -214,7 +215,7 @@ class seq2seq_attention_model:
             self.a_fc=tf.get_variable("a_fc",shape=[self.hidden_size])
 
 # test started: learn to output reverse sequence of itself.
-def test():
+def train():
     # below is a function test; if you use this for text classifiction, you need to tranform sentence to indices of vocabulary first. then feed data to the graph.
     num_classes = 9+2 #additional two classes:one is for _GO, another is for _END
     learning_rate = 0.0001
@@ -231,6 +232,10 @@ def test():
     l2_lambda=0.0001
     model = seq2seq_attention_model(num_classes, learning_rate, batch_size, decay_steps, decay_rate, sequence_length,
                                     vocab_size, embed_size,hidden_size, is_training,decoder_sent_length=decoder_sent_length,l2_lambda=l2_lambda)
+    ckpt_dir = 'checkpoint_dmn/dummy_test/'
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+    saver=tf.train.Saver()
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         for i in range(1500):
@@ -243,10 +248,50 @@ def test():
             loss, acc, predict, W_projection_value, _ = sess.run([model.loss_val, model.accuracy, model.predictions, model.W_projection, model.train_op],
                                                      feed_dict={model.input_x:input_x,model.decoder_input:decoder_input, model.input_y_label: input_y_label,
                                                                 model.dropout_keep_prob: dropout_keep_prob})
+            if i%300==0:
+                save_path = ckpt_dir + "model.ckpt"
+                saver.save(sess,save_path,global_step=i)
+
             print(i,"loss:", loss, "acc:", acc, "label_list_original as input x:",label_list_original,";input_y_label:", input_y_label, "prediction:", predict)
+
+def predict():
+    # below is a function test; if you use this for text classifiction, you need to tranform sentence to indices of vocabulary first. then feed data to the graph.
+    num_classes = 9 + 2  # additional two classes:one is for _GO, another is for _END
+    learning_rate = 0.0001
+    batch_size = 1
+    decay_steps = 1000
+    decay_rate = 0.9
+    sequence_length = 5
+    vocab_size = 300
+    embed_size = 100
+    hidden_size = 100
+    is_training = False #THIS IS DIFFERENT FROM TRAIN()
+    dropout_keep_prob = 1
+    decoder_sent_length = 6
+    l2_lambda = 0.0001
+    model = seq2seq_attention_model(num_classes, learning_rate, batch_size, decay_steps, decay_rate, sequence_length,
+                                    vocab_size, embed_size, hidden_size, is_training,
+                                    decoder_sent_length=decoder_sent_length, l2_lambda=l2_lambda)
+    ckpt_dir = 'checkpoint_dmn/dummy_test/'
+    saver=tf.train.Saver()
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        saver.restore(sess,tf.train.latest_checkpoint(ckpt_dir))
+        for i in range(100):
+            label_list = get_unique_labels()
+            input_x = np.array([label_list], dtype=np.int32)
+            label_list_original = copy.deepcopy(label_list)
+            label_list.reverse()
+            decoder_input = np.array([[0] + [0]*len(label_list)],dtype=np.int32)
+            acc, prediction = sess.run([ model.accuracy, model.predictions],
+                             feed_dict={model.input_x: input_x, model.decoder_input: decoder_input, model.dropout_keep_prob: dropout_keep_prob})
+            input_y_label = np.array([label_list + [1]],dtype=np.int32)
+            print(i, "acc:", acc, "label_list_original as input x:", label_list_original,";input_y_label:", input_y_label, "prediction:", prediction)
 
 def get_unique_labels():
     x=[2,3,4,5,6]
     random.shuffle(x)
     return x
-#test()
+
+#train()
+#predict()

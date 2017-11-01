@@ -8,7 +8,7 @@ import numpy as np
 import os
 import codecs
 from a1_seq2seq_attention_model import seq2seq_attention_model
-from data_util import load_test_data,load_vocab,_GO,_PAD,_EOS,_UNK
+from data_util import load_test_data,load_vocab_as_dict,_GO,_PAD,_EOS,_UNK
 from tflearn.data_utils import  pad_sequences
 
 #configuration
@@ -32,8 +32,9 @@ tf.app.flags.DEFINE_string("vocabulary_en_path","./data/vocabulary.en","path of 
 
 def main(_):
     #1.load test data
-    vocab_cn, vocab_en = load_vocab(FLAGS.vocabulary_cn_path, FLAGS.vocabulary_en_path)
+    vocab_cn, vocab_en = load_vocab_as_dict(FLAGS.vocabulary_cn_path, FLAGS.vocabulary_en_path)
     test=load_test_data(FLAGS.data_en_test_path, vocab_en, FLAGS.decoder_sent_length)
+    print("test[0:10]:",test[0:10])
     test = pad_sequences(test, maxlen=FLAGS.sequence_length, value=0.)  # padding to max length
 
     #2.create session,model,feed data to make a prediction
@@ -79,7 +80,7 @@ def get_label_using_logits(logits,predictions, vocab_cn_index2word, vocab_cn):
     if eos_index in selected_token_ids:
         eos_index = selected_token_ids.index(eos_index)
         selected_token_ids=selected_token_ids[0:eos_index]
-    output_sentence = " ".join([vocab_cn_index2word[index] for index in selected_token_ids])  # ) #cn_vocab[output] TODO TODO
+    output_sentence = "".join([vocab_cn_index2word[index] for index in selected_token_ids])  # ) #cn_vocab[output] TODO TODO
     return output_sentence
 if __name__ == "__main__":
     tf.app.run()

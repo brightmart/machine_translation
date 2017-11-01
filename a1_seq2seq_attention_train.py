@@ -7,63 +7,61 @@ sys.setdefaultencoding('utf8')
 import tensorflow as tf
 import numpy as np
 from a1_seq2seq_attention_model import  seq2seq_attention_model
-from data_util import load_data,load_vocab
-from data_util_vocabulary import _build_vocab
+from data_util import load_data,load_vocab_as_dict
+from data_util_vocabulary import _build_vocab,_build_vocab_en
 import os,math
 import word2vec
 import pickle
 
 #configuration
 FLAGS=tf.app.flags.FLAGS
-tf.app.flags.DEFINE_float("learning_rate",0.01,"learning rate")
-tf.app.flags.DEFINE_integer("batch_size", 256, "Batch size for training/evaluating.") #批处理的大小 32-->128
+tf.app.flags.DEFINE_float("learning_rate",0.002,"learning rate")
+tf.app.flags.DEFINE_integer("batch_size", 128, "Batch size for training/evaluating.") #批处理的大小 32-->128
 tf.app.flags.DEFINE_integer("decay_steps", 6000, "how many steps before decay learning rate.") #6000批处理的大小 32-->128
-tf.app.flags.DEFINE_float("decay_rate", 1.0, "Rate of decay for learning rate.") #0.87一次衰减多少
+tf.app.flags.DEFINE_float("decay_rate", 0.99, "Rate of decay for learning rate.") #0.87一次衰减多少
 tf.app.flags.DEFINE_string("ckpt_dir","ckpt_ai_challenger_translation/","checkpoint location for the model")
 tf.app.flags.DEFINE_integer("sequence_length",30,"max sentence length") #100
 tf.app.flags.DEFINE_integer("decoder_sent_length",30,"max sentence length") #100
+
 tf.app.flags.DEFINE_integer("embed_size",128,"embedding size")
 tf.app.flags.DEFINE_boolean("is_training",True,"is traning.true:tranining,false:testing/inference")
 tf.app.flags.DEFINE_integer("num_epochs",20,"number of epochs to run.")
-tf.app.flags.DEFINE_integer("validate_step", 1000, "how many step to validate.") #1000做一次检验
+tf.app.flags.DEFINE_integer("validate_step", 6000, "how many step to validate.") #1000做一次检验
 tf.app.flags.DEFINE_boolean("use_embedding",True,"whether to use embedding or not.")
 tf.app.flags.DEFINE_string("word2vec_model_path","./data/ai_challenger_translation.bin-128","word2vec's vocabulary and vectors") #zhihu-word2vec.bin-100-->zhihu-word2vec-multilabel-minicount15.bin-100
 tf.app.flags.DEFINE_integer("hidden_size",128,"hidden size")
-tf.app.flags.DEFINE_float("l2_lambda", 0.001, "l2 regularization") #0.0001
-tf.app.flags.DEFINE_integer("vocabulary_size_en",100000,"vocabulary size of english")
-tf.app.flags.DEFINE_integer("vocabulary_size_cn",100000,"vocabulary size of chinese")
+tf.app.flags.DEFINE_float("l2_lambda", 0.0001, "l2 regularization")
+tf.app.flags.DEFINE_integer("vocabulary_size_en",60000,"vocabulary size of english") #100000
+tf.app.flags.DEFINE_integer("vocabulary_size_cn",100000,"vocabulary size of chinese") #100000
 tf.app.flags.DEFINE_string("data_folder","./data","path of traning data.")
 tf.app.flags.DEFINE_string("data_cn_path","./data/train.zh","path of traning data.")
 tf.app.flags.DEFINE_string("data_en_path","./data/train.en","path of traning data.")
+tf.app.flags.DEFINE_string("data_en_processed_path","./data/train.en.processed","path of traning data.")
+
 tf.app.flags.DEFINE_string("data_cn_valid_path","./data/valid.en-zh.zh.sgm","path of traning data.")
 tf.app.flags.DEFINE_string("data_en_valid_path","./data/valid.en-zh.en.sgm","path of traning data.")
 tf.app.flags.DEFINE_string("vocabulary_cn_path","./data/vocabulary.zh","path of traning data.")
 tf.app.flags.DEFINE_string("vocabulary_en_path","./data/vocabulary.en","path of traning data.")
-tf.app.flags.DEFINE_boolean("experiment_mode",True,"whether only to use a small fraction of data to do experiment.")
-#tf.app.flags.DEFINE_integer("experiment_mode",True,"whether only to use a small fraction of data to do experiment.")
+tf.app.flags.DEFINE_boolean("test_mode",False,"whether it is test mode. if test mode, only use training size will be only 10,000.")
 
 #1.load data(X:list of lint,y:int). 2.create session. 3.feed data. 4.training (5.validation) ,(6.prediction)
 def main(_):
     #PART1############################################PREPARE DATA FOR TRAINING############################################
     #1.create vocab
-    _build_vocab(FLAGS.data_en_path, FLAGS.vocabulary_en_path, FLAGS.vocabulary_size_en,experiment_mode=FLAGS.experiment_mode)
-    _build_vocab(FLAGS.data_cn_path, FLAGS.vocabulary_cn_path, FLAGS.vocabulary_size_cn,experiment_mode=FLAGS.experiment_mode)
+    #_build_vocab(FLAGS.data_en_path, FLAGS.vocabulary_en_path, FLAGS.vocabulary_size_en)
+    _build_vocab_en(FLAGS.word2vec_model_path, FLAGS.vocabulary_en_path, FLAGS.vocabulary_size_en)
+    _build_vocab(FLAGS.data_cn_path, FLAGS.vocabulary_cn_path, FLAGS.vocabulary_size_cn)
     #2.load vocab
-    vocab_cn, vocab_en=load_vocab(FLAGS.vocabulary_cn_path, FLAGS.vocabulary_en_path)
-    #vocab_cn_index2word=dict(vocab_cn[val,key] for key,val in vocab_cn.items())
-    #for k,v in vocab_en.items():#'ssss':100
-    #    print(k,v)
-    vocab_en_index2word=dict([val,key] for key,val in vocab_en.items())
+    vocab_cn, vocab_en=load_vocab_as_dict(FLAGS.vocabulary_cn_path, FLAGS.vocabulary_en_path)
+    vocab_en_index2word=dict([val,key] for key,val in vocab_en.items()) #get reverse order.
     #3.load data
-    train,valid=load_data(FLAGS.data_folder, FLAGS.data_cn_path, FLAGS.data_en_path, vocab_cn,
-                          vocab_en,FLAGS.data_cn_valid_path,FLAGS.data_en_valid_path,FLAGS.sequence_length,experiment_mode=FLAGS.experiment_mode)
+    train,valid=load_data(FLAGS.data_folder, FLAGS.data_cn_path, FLAGS.data_en_path, vocab_cn, vocab_en,FLAGS.data_cn_valid_path,FLAGS.data_en_valid_path,FLAGS.sequence_length,test_mode=FLAGS.test_mode)
     trainX, trainY_input,trainY_output = train
     testX, testY_input,testY_output = valid
     #4. print sample data
-    print("trainX:", trainX[0:10])
-    print("trainY_input:",trainY_input[0:10])
-    print("trainY_output:",trainY_output[0:10])
-    #PART1############################################PREPARE DATA FOR TRAINING#############################################
+    print("trainX:", trainX[0:10]);print("trainY_input:",trainY_input[0:10]);print("trainY_output:",trainY_output[0:10])
+    print("testX:", testX[0:10]);print("testY_input:",testY_input[0:10]);print("testY_output:",testY_output[0:10])
+    # PART1############################################PREPARE DATA FOR TRAINING#############################################
     # PART2############################################TRAINING#############################################################
     # 2.create session.
     config = tf.ConfigProto()
@@ -102,11 +100,14 @@ def main(_):
                 curr_loss, curr_acc, _ = sess.run([model.loss_val, model.accuracy, model.train_op],feed_dict)
                 loss, counter, acc = loss + curr_loss, counter + 1, acc + curr_acc
                 if counter % 50 == 0:
-                    print("seq2seq_with_attention==>Epoch %d\tBatch %d\tTrain Loss:%.3f\tTrain Accuracy:%.3f\t" %(epoch, counter,loss / float(counter),acc / float(counter)))
+                    print("seq2seq_with_attention==>Epoch %d\tBatch %d\tTrain Loss:%.3f\tTrain Accuracy:%.3f" %
+                        (epoch, counter, math.exp(loss / float(counter)) if (loss / float(counter)) < 20 else 10000.000,acc / float(counter)))
                 ##VALIDATION VALIDATION VALIDATION PART######################################################################################################
                 if start % (FLAGS.validate_step * FLAGS.batch_size) == 0:
-                    eval_loss, eval_acc = do_eval(sess, model, testX, testY_input,testY_output, batch_size)
-                    print("seq2seq_with_attention.validation.part. previous_eval_loss:",previous_eval_loss ,";current_eval_loss:",eval_loss)
+                    eval_loss, _ = do_eval(sess, model, testX, testY_input,testY_output, batch_size)
+                    print("seq2seq_with_attention.validation.part. previous_eval_loss:",
+                          math.exp(previous_eval_loss) if previous_eval_loss < 20 else 10000.000, ";current_eval_loss:",
+                          math.exp(eval_loss) if eval_loss < 20 else 10000.000)
                     if eval_loss > previous_eval_loss:  # if loss is not decreasing
                         # reduce the learning rate by a factor of 0.5
                         print("seq2seq_with_attention==>validation.part.going to reduce the learning rate.")
@@ -116,7 +117,9 @@ def main(_):
                         print("seq2seq_with_attention==>validation.part.learning_rate1:", learning_rate1," ;learning_rate2:", learning_rate2)
                     else:  # loss is decreasing
                         if eval_loss < best_eval_loss:
-                            print("seq2seq_with_attention==>going to save the model.eval_loss:",eval_loss, ";best_eval_loss:",best_eval_loss)
+                            print("seq2seq_with_attention==>going to save the model.eval_loss:",
+                                  math.exp(eval_loss) if eval_loss < 20 else 10000.000, ";best_eval_loss:",
+                                  math.exp(best_eval_loss) if best_eval_loss < 20 else 10000.000)
                             # save model to checkpoint
                             save_path = FLAGS.ckpt_dir + "model.ckpt"
                             saver.save(sess, save_path, global_step=epoch)
