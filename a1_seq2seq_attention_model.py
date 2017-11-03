@@ -6,12 +6,14 @@ import tensorflow.contrib as tf_contrib
 import random
 import copy
 import os
+from a1_beam_search_seq2seq import beam_search_rnn_decoder
 from a1_seq2seq import rnn_decoder_with_attention,extract_argmax_and_embed
+from data_util import _GO_ID,_END_ID
 
 class seq2seq_attention_model:
     def __init__(self, num_classes, learning_rate, batch_size, decay_steps, decay_rate, sequence_length,
                  vocab_size, embed_size,hidden_size, is_training,decoder_sent_length=30,
-                 initializer=tf.random_normal_initializer(stddev=0.1),clip_gradients=5.0,l2_lambda=0.0001):
+                 initializer=tf.random_normal_initializer(stddev=0.1),clip_gradients=5.0,l2_lambda=0.0001,use_beam_search=True):
         """init all hyperparameter here"""
         # set hyperparamter
         self.num_classes = num_classes
@@ -27,6 +29,7 @@ class seq2seq_attention_model:
         self.hidden_size = hidden_size
         self.clip_gradients=clip_gradients
         self.l2_lambda=l2_lambda
+        self.use_beam_search=use_beam_search
 
         self.input_x = tf.placeholder(tf.int32, [None, self.sequence_length], name="input_x")                 #x
         self.decoder_input = tf.placeholder(tf.int32, [None, self.decoder_sent_length],name="decoder_input")  #y, but shift
@@ -41,7 +44,7 @@ class seq2seq_attention_model:
         self.instantiate_weights()
         self.logits = self.inference() #logits shape:[batch_size,decoder_sent_length,self.num_classes]
 
-        self.predictions = tf.argmax(self.logits, axis=2, name="predictions")
+        self.predictions = tf.argmax(self.logits, axis=2, name="predictions") #[batch_size,decoder_sent_length]
         self.accuracy = tf.constant(0.5)  # fuke accuracy. (you can calcuate accuracy outside of graph using method calculate_accuracy(...) in train.py)
         if not is_training:
             return
@@ -80,9 +83,26 @@ class seq2seq_attention_model:
             #input2:initial_state: 2D Tensor with shape  [batch_size x cell.state_size].
             #input3:attention_states:represent X. 3D Tensor [batch_size x attn_length x attn_size].
             #output:?
-        outputs, final_state=rnn_decoder_with_attention(decoder_input_squeezed, initial_state, cell, loop_function, attention_states, scope=None) # A list.length:decoder_sent_length.each element is:[batch_size x output_size]
-        decoder_output=tf.stack(outputs,axis=1) #decoder_output:[batch_size,decoder_sent_length,hidden_size*2]
-        decoder_output=tf.reshape(decoder_output,shape=(-1,self.hidden_size*2)) #decoder_output:[batch_size*decoder_sent_length,hidden_size*2]
+        #if not self.is_training and self.use_beam_search:
+        #    print("use beam search during decoding at inference")
+        #    class Config():
+        #        pass
+        #    config = Config()
+        #    config.beam_width = 1
+        #    config.num_steps = self.decoder_sent_length
+        #    config.start_token = _GO_ID
+        #    config.dtype = tf.float32
+        #    config.vocab_size = self.vocab_sz
+        #    config.eos_token = _END_ID
+        #    config.length_penalty_factor = 0.0
+        #    self.beam_decoder_outputs, beam_decoder_states = beam_search_rnn_decoder(memory_output,self.gru_cell,self.E,output_projection,config)
+        #    return
+        #    pass
+        #else:
+        outputs, final_state = rnn_decoder_with_attention(decoder_input_squeezed, initial_state, cell,loop_function, attention_states,scope=None)  # A list.length:decoder_sent_length.each element is:[batch_size x output_size]
+        decoder_output = tf.stack(outputs, axis=1)  # decoder_output:[batch_size,decoder_sent_length,hidden_size*2]
+        decoder_output = tf.reshape(decoder_output, shape=(-1, self.hidden_size * 2))  # decoder_output:[batch_size*decoder_sent_length,hidden_size*2]
+
 
         with tf.name_scope("dropout"):
             decoder_output = tf.nn.dropout(decoder_output,keep_prob=self.dropout_keep_prob)  # shape:[None,hidden_size*4]

@@ -37,7 +37,6 @@ tf.app.flags.DEFINE_string("data_folder","./data","path of traning data.")
 tf.app.flags.DEFINE_string("data_cn_path","./data/train.zh","path of traning data.")
 tf.app.flags.DEFINE_string("data_en_path","./data/train.en","path of traning data.")
 tf.app.flags.DEFINE_string("data_en_processed_path","./data/train.en.processed","path of traning data.")
-
 tf.app.flags.DEFINE_string("data_cn_valid_path","./data/valid.en-zh.zh.sgm","path of traning data.")
 tf.app.flags.DEFINE_string("data_en_valid_path","./data/valid.en-zh.en.sgm","path of traning data.")
 tf.app.flags.DEFINE_string("vocabulary_cn_path","./data/vocabulary.zh","path of traning data.")
@@ -55,7 +54,7 @@ def main(_):
     vocab_cn, vocab_en=load_vocab_as_dict(FLAGS.vocabulary_cn_path, FLAGS.vocabulary_en_path)
     vocab_en_index2word=dict([val,key] for key,val in vocab_en.items()) #get reverse order.
     #3.load data
-    train,valid=load_data(FLAGS.data_folder, FLAGS.data_cn_path, FLAGS.data_en_path, vocab_cn, vocab_en,FLAGS.data_cn_valid_path,FLAGS.data_en_valid_path,FLAGS.sequence_length,test_mode=FLAGS.test_mode)
+    train,valid=load_data(FLAGS.data_folder, FLAGS.data_cn_path, FLAGS.data_en_path,FLAGS.data_en_processed_path, vocab_cn, vocab_en,FLAGS.data_cn_valid_path,FLAGS.data_en_valid_path,FLAGS.sequence_length,test_mode=FLAGS.test_mode)
     trainX, trainY_input,trainY_output = train
     testX, testY_input,testY_output = valid
     #4. print sample data
