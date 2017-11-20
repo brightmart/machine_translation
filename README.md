@@ -72,6 +72,8 @@ V.Notices:
 
 2.Convolutional Sequence to Sequence Learning
 
+3. Attention is all you need
+
 #Preference
 ------------------------------------------------------------------------------------------------
 1.Neural Machine Translation by Jointly Learning to Align and Translate
