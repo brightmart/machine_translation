@@ -78,4 +78,6 @@ V.Notices:
 ------------------------------------------------------------------------------------------------
 1.Neural Machine Translation by Jointly Learning to Align and Translate
 
+2.Effective Approaches to Attention-based Neural Machine Translation
+
 for any question or suggestion, you can contact brightmart@hotmail.com
