@@ -6,14 +6,13 @@ import tensorflow.contrib as tf_contrib
 import random
 import copy
 import os
-from a1_beam_search_seq2seq import beam_search_rnn_decoder
 from a1_seq2seq import rnn_decoder_with_attention,extract_argmax_and_embed
-from data_util import _GO_ID,_END_ID
+#from data_util import _GO_ID,_END_ID
 
 class seq2seq_attention_model:
     def __init__(self, num_classes, learning_rate, batch_size, decay_steps, decay_rate, sequence_length,
-                 vocab_size, embed_size,hidden_size, is_training,decoder_sent_length=30,
-                 initializer=tf.random_normal_initializer(stddev=0.1),clip_gradients=5.0,l2_lambda=0.0001,use_beam_search=True):
+                 vocab_size, embed_size,hidden_size, sequence_length_batch,is_training,decoder_sent_length=30,
+                 initializer=tf.random_normal_initializer(stddev=0.1),clip_gradients=5.0,l2_lambda=0.0001,use_beam_search=False):
         """init all hyperparameter here"""
         # set hyperparamter
         self.num_classes = num_classes
@@ -30,6 +29,7 @@ class seq2seq_attention_model:
         self.clip_gradients=clip_gradients
         self.l2_lambda=l2_lambda
         self.use_beam_search=use_beam_search
+        self.sequence_length_batch=sequence_length_batch
 
         self.input_x = tf.placeholder(tf.int32, [None, self.sequence_length], name="input_x")                 #x
         self.decoder_input = tf.placeholder(tf.int32, [None, self.decoder_sent_length],name="decoder_input")  #y, but shift
@@ -52,65 +52,36 @@ class seq2seq_attention_model:
         self.train_op = self.train()
 
     def inference(self):
-        """main computation graph here:
-        #1.Word embedding. 2.Encoder with GRU 3.Decoder using GRU(optional with attention)."""
-        ###################################################################################################################################
-        # 1.embedding of words
-        self.embedded_words = tf.nn.embedding_lookup(self.Embedding,self.input_x)  #[None, self.sequence_length, self.embed_size]
-        # 2.encoder with GRU
-        # 2.1 forward gru
-        hidden_state_forward_list = self.gru_forward(self.embedded_words,self.gru_cell)  # a list,length is sentence_length, each element is [batch_size,hidden_size]
-        # 2.2 backward gru
-        hidden_state_backward_list = self.gru_forward(self.embedded_words,self.gru_cell,reverse=True)  # a list,length is sentence_length, each element is [batch_size*num_sentences,hidden_size]
-        # 2.3 concat forward hidden state and backward hidden state. hidden_state: a list.len:sentence_length,element:[batch_size*num_sentences,hidden_size*2]
-        thought_vector_list=[tf.concat([h_forward,h_backward],axis=1) for h_forward,h_backward in zip(hidden_state_forward_list,hidden_state_backward_list)]#list,len:sent_len,e:[batch_size,hidden_size*2]
+        """main computation graph here: 1.Word embedding. 2.Encoder with GRU 3.Decoder using GRU(optional with attention)."""
+        # 1.word embedding
+        embedded_words = tf.nn.embedding_lookup(self.Embedding,self.input_x)  # [None, self.sequence_length, self.embed_size]
 
-        # 3.Decoder using GRU with attention
-        thought_vector=tf.stack(thought_vector_list,axis=1) #shape:[batch_size,sentence_length,hidden_size*2]
-        #initial_state=tf.reduce_sum(thought_vector,axis=1) #[batch_size,hidden_size*2] #TODO NEED TO TEST WHICH ONE IS BETTER: SUM UP OR USE LAST HIDDEN STATE==>similiarity.
-        initial_state=tf.nn.tanh(tf.matmul(hidden_state_backward_list[0],self.W_initial_state)+self.b_initial_state) #initial_state:[batch_size,hidden_size*2]. TODO this is follow paper's way.
-        cell=self.gru_cell_decoder #this is a special cell. because it beside previous hidden state, current input, it also has a context vecotor, which represent attention result.
+        # 2.encode with bi-directional GRU
+        fw_cell =tf.nn.rnn_cell.BasicLSTMCell(self.hidden_size, state_is_tuple=True) #rnn_cell.LSTMCell
+        bw_cell =tf.nn.rnn_cell.BasicLSTMCell(self.hidden_size, state_is_tuple=True)
+        bi_outputs, bi_state = tf.nn.bidirectional_dynamic_rnn(fw_cell, bw_cell, embedded_words, dtype=tf.float32,#sequence_length: size `[batch_size]`,containing the actual lengths for each of the sequences in the batch
+                                                          sequence_length=self.sequence_length_batch, time_major=False, swap_memory=True)
+        encode_outputs=tf.concat([bi_outputs[0],bi_outputs[1]],-1) #should be:[None, self.sequence_length,self.hidden_size*2]
 
-        output_projection=(self.W_projection,self.b_projection) #W_projection:[self.hidden_size * 2, self.num_classes]; b_projection:[self.num_classes]
-        loop_function = extract_argmax_and_embed(self.Embedding_label,output_projection) if not self.is_training else None #loop function will be used only at testing, not training.
-        attention_states=thought_vector #[None, self.sequence_length, self.embed_size]
-        decoder_input_embedded=tf.nn.embedding_lookup(self.Embedding_label,self.decoder_input) #[batch_size,self.decoder_sent_length,embed_size]
-        decoder_input_splitted = tf.split(decoder_input_embedded, self.decoder_sent_length,axis=1)  # it is a list,length is decoder_sent_length, each element is [batch_size,1,embed_size]
-        decoder_input_squeezed = [tf.squeeze(x, axis=1) for x in decoder_input_splitted]  # it is a list,length is decoder_sent_length, each element is [batch_size,embed_size]
-
-        #rnn_decoder_with_attention(decoder_inputs, initial_state, cell, loop_function,attention_states,scope=None):
-            #input1:decoder_inputs:target, shift by one. for example.the target is:"X Y Z",then decoder_inputs should be:"START X Y Z" A list of 2D Tensors [batch_size x input_size].
-            #input2:initial_state: 2D Tensor with shape  [batch_size x cell.state_size].
-            #input3:attention_states:represent X. 3D Tensor [batch_size x attn_length x attn_size].
-            #output:?
-        #if not self.is_training and self.use_beam_search:
-        #    print("use beam search during decoding at inference")
-        #    class Config():
-        #        pass
-        #    config = Config()
-        #    config.beam_width = 1
-        #    config.num_steps = self.decoder_sent_length
-        #    config.start_token = _GO_ID
-        #    config.dtype = tf.float32
-        #    config.vocab_size = self.vocab_sz
-        #    config.eos_token = _END_ID
-        #    config.length_penalty_factor = 0.0
-        #    self.beam_decoder_outputs, beam_decoder_states = beam_search_rnn_decoder(memory_output,self.gru_cell,self.E,output_projection,config)
-        #    return
-        #    pass
-        #else:
-        outputs, final_state = rnn_decoder_with_attention(decoder_input_squeezed, initial_state, cell,loop_function, attention_states,scope=None)  # A list.length:decoder_sent_length.each element is:[batch_size x output_size]
-        decoder_output = tf.stack(outputs, axis=1)  # decoder_output:[batch_size,decoder_sent_length,hidden_size*2]
-        decoder_output = tf.reshape(decoder_output, shape=(-1, self.hidden_size * 2))  # decoder_output:[batch_size*decoder_sent_length,hidden_size*2]
-
-
-        with tf.name_scope("dropout"):
-            decoder_output = tf.nn.dropout(decoder_output,keep_prob=self.dropout_keep_prob)  # shape:[None,hidden_size*4]
+        # 3. decode with attention
+        # decoder_inputs: embeding and split
+        decoder_inputs=tf.nn.embedding_lookup(self.Embedding_label,self.decoder_input) #[batch_size,self.decoder_sent_length,embed_size]
+        decoder_inputs = tf.split(decoder_inputs, self.decoder_sent_length,axis=1)  # it is a list,length is decoder_sent_length, each element is [batch_size,1,embed_size]
+        decoder_inputs = [tf.squeeze(x, axis=1) for x in decoder_inputs]  # it is a list,length is decoder_sent_length, each element is [batch_size,embed_size]
+        cell = tf.nn.rnn_cell.BasicLSTMCell(self.hidden_size, state_is_tuple=False)
+        output_projection = (self.W_projection, self.b_projection)
+        loop_function=extract_argmax_and_embed(self.Embedding_label,output_projection) if not self.is_training else None
+        initial_state=tf.concat([bi_state[0][0],bi_state[1][0]],-1) #shape:[batch_size,hidden_size*2].last hidden state as initial state.bi_state[0] is forward hidden states; bi_state[1] is backward hidden states
+        outputs, final_state = rnn_decoder_with_attention(decoder_inputs, initial_state, cell,loop_function, encode_outputs,self.hidden_size,scope=None)  # A list.length:decoder_sent_length.each element is:[batch_size x output_size]
+        decoder_output = tf.stack(outputs, axis=1)  # decoder_output:[batch_size,decoder_sent_length,hidden_size]
+        decoder_output = tf.reshape(decoder_output, shape=(-1, self.hidden_size))  # decoder_output:[batch_size*decoder_sent_length,hidden_size]
+        with tf.name_scope("dropout"): #dropout as regularization
+            decoder_output = tf.nn.dropout(decoder_output,keep_prob=self.dropout_keep_prob)  # shape:[-1,hidden_size]
         # 4. get logits
         with tf.name_scope("output"):
+            print("###decoder_output:",decoder_output) # <tf.Tensor 'dropout/dropout/mul:0' shape=(12, 1000)
             logits = tf.matmul(decoder_output, self.W_projection) + self.b_projection  # logits shape:[batch_size*decoder_sent_length,self.num_classes]==tf.matmul([batch_size*decoder_sent_length,hidden_size*2],[hidden_size*2,self.num_classes])
             logits=tf.reshape(logits,shape=(self.batch_size,self.decoder_sent_length,self.num_classes)) #logits shape:[batch_size,decoder_sent_length,self.num_classes]
-        ###################################################################################################################################
         return logits
 
     def loss_seq2seq(self):
@@ -133,61 +104,6 @@ class seq2seq_attention_model:
                                                    learning_rate=learning_rate, optimizer="Adam",clip_gradients=self.clip_gradients)
         return train_op
 
-    def gru_cell(self, Xt, h_t_minus_1):
-        """
-        single step of gru for word level
-        :param Xt: Xt:[batch_size,embed_size]
-        :param h_t_minus_1:[batch_size,embed_size]
-        :return:
-        """
-        # 1.update gate: decides how much past information is kept and how much new information is added.
-        z_t = tf.nn.sigmoid(tf.matmul(Xt, self.W_z) + tf.matmul(h_t_minus_1,self.U_z) + self.b_z)  # z_t:[batch_size,self.hidden_size]
-        # 2.reset gate: controls how much the past state contributes to the candidate state.
-        r_t = tf.nn.sigmoid(tf.matmul(Xt, self.W_r) + tf.matmul(h_t_minus_1,self.U_r) + self.b_r)  # r_t:[batch_size,self.hidden_size]
-        # candiate state h_t~
-        h_t_candiate = tf.nn.tanh(tf.matmul(Xt, self.W_h) +r_t * (tf.matmul(h_t_minus_1, self.U_h)) + self.b_h)  # h_t_candiate:[batch_size,self.hidden_size]
-        # new state: a linear combine of pervious hidden state and the current new state h_t~
-        h_t = (1 - z_t) * h_t_minus_1 + z_t * h_t_candiate  # h_t:[batch_size*num_sentences,hidden_size]
-        return h_t
-
-    def gru_cell_decoder(self, Xt, h_t_minus_1,context_vector):
-        """
-        single step of gru for word level
-        :param Xt: Xt:[batch_size,embed_size]
-        :param h_t_minus_1:[batch_size,embed_size]
-        :param context_vector. [batch_size,embed_size].this represent the result from attention( weighted sum of input during current decoding step)
-        :return:
-        """
-        # 1.update gate: decides how much past information is kept and how much new information is added.
-        z_t = tf.nn.sigmoid(tf.matmul(Xt, self.W_z_decoder) + tf.matmul(h_t_minus_1,self.U_z_decoder) +tf.matmul(context_vector,self.C_z_decoder)+self.b_z_decoder)  # z_t:[batch_size,self.hidden_size]
-        # 2.reset gate: controls how much the past state contributes to the candidate state.
-        r_t = tf.nn.sigmoid(tf.matmul(Xt, self.W_r_decoder) + tf.matmul(h_t_minus_1,self.U_r_decoder) +tf.matmul(context_vector,self.C_r_decoder)+self.b_r_decoder)  # r_t:[batch_size,self.hidden_size]
-        # candiate state h_t~
-        h_t_candiate = tf.nn.tanh(tf.matmul(Xt, self.W_h_decoder) +r_t * (tf.matmul(h_t_minus_1, self.U_h_decoder)) +tf.matmul(context_vector, self.C_h_decoder)+ self.b_h_decoder)  # h_t_candiate:[batch_size,self.hidden_size]
-        # new state: a linear combine of pervious hidden state and the current new state h_t~
-        h_t = (1 - z_t) * h_t_minus_1 + z_t * h_t_candiate  # h_t:[batch_size*num_sentences,hidden_size]
-        return h_t,h_t
-
-    # forward gru for first level: word levels
-    def gru_forward(self, embedded_words,gru_cell, reverse=False):
-        """
-        :param embedded_words:[None,sequence_length, self.embed_size]
-        :return:forward hidden state: a list.length is sentence_length, each element is [batch_size,hidden_size]
-        """
-        # split embedded_words
-        embedded_words_splitted = tf.split(embedded_words, self.sequence_length,axis=1)  # it is a list,length is sentence_length, each element is [batch_size,1,embed_size]
-        embedded_words_squeeze = [tf.squeeze(x, axis=1) for x in embedded_words_splitted]  # it is a list,length is sentence_length, each element is [batch_size,embed_size]
-        h_t = tf.ones((self.batch_size,self.hidden_size))
-        h_t_list = []
-        if reverse:
-            embedded_words_squeeze.reverse()
-        for time_step, Xt in enumerate(embedded_words_squeeze):  # Xt: [batch_size,embed_size]
-            h_t = gru_cell(Xt,h_t) #h_t:[batch_size,embed_size]<------Xt:[batch_size,embed_size];h_t:[batch_size,embed_size]
-            h_t_list.append(h_t)
-        if reverse:
-            h_t_list.reverse()
-        return h_t_list  # a list,length is sentence_length, each element is [batch_size,hidden_size]
-
     def instantiate_weights(self):
         """define all weights here"""
         with tf.name_scope("decoder_init_state"):
@@ -196,43 +112,9 @@ class seq2seq_attention_model:
         with tf.name_scope("embedding_projection"):  # embedding matrix
             self.Embedding = tf.get_variable("Embedding", shape=[self.vocab_size, self.embed_size],initializer=self.initializer)  # [vocab_size,embed_size] tf.random_uniform([self.vocab_size, self.embed_size],-1.0,1.0)
             self.Embedding_label = tf.get_variable("Embedding_label", shape=[self.num_classes, self.embed_size*2],dtype=tf.float32) #,initializer=self.initializer
-            self.W_projection = tf.get_variable("W_projection", shape=[self.hidden_size*2, self.num_classes],
-                                                initializer=self.initializer)  # [embed_size,label_size]
+            self.W_projection = tf.get_variable("W_projection", shape=[self.hidden_size, self.num_classes],initializer=self.initializer)  # [embed_size,label_size]
             self.b_projection = tf.get_variable("b_projection", shape=[self.num_classes])
 
-        # GRU parameters:update gate related
-        with tf.name_scope("gru_weights_encoder"):
-            self.W_z = tf.get_variable("W_z", shape=[self.embed_size, self.hidden_size], initializer=self.initializer)
-            self.U_z = tf.get_variable("U_z", shape=[self.embed_size, self.hidden_size], initializer=self.initializer)
-            self.b_z = tf.get_variable("b_z", shape=[self.hidden_size])
-            # GRU parameters:reset gate related
-            self.W_r = tf.get_variable("W_r", shape=[self.embed_size, self.hidden_size], initializer=self.initializer)
-            self.U_r = tf.get_variable("U_r", shape=[self.embed_size, self.hidden_size], initializer=self.initializer)
-            self.b_r = tf.get_variable("b_r", shape=[self.hidden_size])
-
-            self.W_h = tf.get_variable("W_h", shape=[self.embed_size, self.hidden_size], initializer=self.initializer)
-            self.U_h = tf.get_variable("U_h", shape=[self.embed_size, self.hidden_size], initializer=self.initializer)
-            self.b_h = tf.get_variable("b_h", shape=[self.hidden_size])
-
-        with tf.name_scope("gru_weights_decoder"):
-            self.W_z_decoder = tf.get_variable("W_z_decoder", shape=[self.embed_size*2, self.hidden_size*2], initializer=self.initializer)
-            self.U_z_decoder = tf.get_variable("U_z_decoder", shape=[self.embed_size*2, self.hidden_size*2], initializer=self.initializer)
-            self.C_z_decoder = tf.get_variable("C_z_decoder", shape=[self.embed_size * 2, self.hidden_size * 2],initializer=self.initializer) #TODO
-            self.b_z_decoder = tf.get_variable("b_z_decoder", shape=[self.hidden_size*2])
-            # GRU parameters:reset gate related
-            self.W_r_decoder = tf.get_variable("W_r_decoder", shape=[self.embed_size*2, self.hidden_size*2], initializer=self.initializer)
-            self.U_r_decoder = tf.get_variable("U_r_decoder", shape=[self.embed_size*2, self.hidden_size*2], initializer=self.initializer)
-            self.C_r_decoder = tf.get_variable("C_r_decoder", shape=[self.embed_size * 2, self.hidden_size * 2],initializer=self.initializer) #TODO
-            self.b_r_decoder = tf.get_variable("b_r_decoder", shape=[self.hidden_size*2])
-
-            self.W_h_decoder = tf.get_variable("W_h_decoder", shape=[self.embed_size*2, self.hidden_size*2], initializer=self.initializer)
-            self.U_h_decoder = tf.get_variable("U_h_decoder", shape=[self.embed_size*2, self.hidden_size*2], initializer=self.initializer)   #TODO
-            self.C_h_decoder = tf.get_variable("C_h_decoder", shape=[self.embed_size * 2, self.hidden_size * 2],initializer=self.initializer)
-            self.b_h_decoder = tf.get_variable("b_h_decoder", shape=[self.hidden_size*2])
-
-        with tf.name_scope("full_connected"):
-            self.W_fc=tf.get_variable("W_fc",shape=[self.hidden_size*2,self.hidden_size])
-            self.a_fc=tf.get_variable("a_fc",shape=[self.hidden_size])
 
 # test started: learn to output reverse sequence of itself.
 def train():
@@ -244,14 +126,15 @@ def train():
     decay_rate = 0.9
     sequence_length = 5
     vocab_size = 300
-    embed_size = 100 #100
-    hidden_size = 100
+    embed_size = 1000 #100
+    hidden_size = 1000
     is_training = True
     dropout_keep_prob = 1  # 0.5 #num_sentences
     decoder_sent_length=6
     l2_lambda=0.0001
+    sequence_length_batch=[sequence_length]*batch_size
     model = seq2seq_attention_model(num_classes, learning_rate, batch_size, decay_steps, decay_rate, sequence_length,
-                                    vocab_size, embed_size,hidden_size, is_training,decoder_sent_length=decoder_sent_length,l2_lambda=l2_lambda)
+                                    vocab_size, embed_size,hidden_size, sequence_length_batch,is_training,decoder_sent_length=decoder_sent_length,l2_lambda=l2_lambda)
     ckpt_dir = 'checkpoint_dmn/dummy_test/'
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
