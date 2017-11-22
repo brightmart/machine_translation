@@ -80,8 +80,8 @@ V.Notices:
 
 2.Effective Approaches to Attention-based Neural Machine Translation
 
-3. <a href='https://github.com/tensorflow/nmt'>Neural Machine Translation (seq2seq) Tutorial</a>
+3.<a href='https://github.com/tensorflow/nmt'>Neural Machine Translation (seq2seq) Tutorial</a>
 
-4. <a href='Subword Neural Machine Translation'>https://github.com/rsennrich/subword-nmt</a>
+4.<a href='Subword Neural Machine Translation'>https://github.com/rsennrich/subword-nmt</a>
 
 for any question or suggestion, you can contact brightmart@hotmail.com
