@@ -72,7 +72,7 @@ V.Notices:
 
 2.Convolutional Sequence to Sequence Learning
 
-3. Attention is all you need
+3.Attention is all you need
 
 #Preference
 ------------------------------------------------------------------------------------------------
