@@ -53,13 +53,18 @@ def rnn_decoder_with_attention(decoder_inputs, initial_state, cell, loop_functio
         prev = None
         current_target_hidden_state = initial_state #shape:[batch_size x state_size]
         for i, inp in enumerate(decoder_inputs):#循环解码部分的输入。如sentence_length个[batch_size x input_size].如果是训练，使用训练数据的输入；如果是test, 将t时刻的输出作为t + 1 时刻的s输入
+            if i==0:
+                print(i, "inp:", inp)
             if loop_function is not None and prev is not None:#测试的时候：如果loop_function不为空且前一个词的值不为空，那么使用前一个的值作为RNN的输入
                 with tf.variable_scope("loop_function", reuse=True):
                     inp = loop_function(prev, i)
+                    print(i, "inp:", inp)
+
             if i > 0:
                 tf.get_variable_scope().reuse_variables()
 
             #output,current_target_hidden_state=cell(inp,attention_vector)
+            print("###inp:",inp,";current_target_hidden_state:",current_target_hidden_state)
             output, current_target_hidden_state = cell(inp, current_target_hidden_state)
 
             #1. the current target hidden state is compared with all source states to derive attention weights

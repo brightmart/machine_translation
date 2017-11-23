@@ -187,6 +187,9 @@ def read_sgm_file_as_list(file_path):
             listt.append(line)
     return listt
 
+#we said 4:@@ 25 just do it!--->we said 4 : @@ 25 just do it !
+#we said 5:00 . it's only 4:@@ 58 .--->we said 5 : 00 . it's only 4 : @@ 58 .
+
 
 _WORD_SPLIT = re.compile("([.,!?\":;，。！)(])")
 def basic_tokenizer(sentence, jieba_flag=False):

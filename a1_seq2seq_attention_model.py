@@ -166,14 +166,15 @@ def predict():
     decay_rate = 0.9
     sequence_length = 5
     vocab_size = 300
-    embed_size = 100
-    hidden_size = 100
+    embed_size = 1000
+    hidden_size = 1000
     is_training = False #THIS IS DIFFERENT FROM TRAIN()
     dropout_keep_prob = 1
     decoder_sent_length = 6
     l2_lambda = 0.0001
+    sequence_length_batch=[sequence_length]*batch_size
     model = seq2seq_attention_model(num_classes, learning_rate, batch_size, decay_steps, decay_rate, sequence_length,
-                                    vocab_size, embed_size, hidden_size, is_training,
+                                    vocab_size, embed_size, hidden_size, sequence_length_batch,is_training,
                                     decoder_sent_length=decoder_sent_length, l2_lambda=l2_lambda)
     ckpt_dir = 'checkpoint_dmn/dummy_test/'
     saver=tf.train.Saver()

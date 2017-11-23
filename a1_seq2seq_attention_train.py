@@ -15,21 +15,21 @@ import pickle
 
 #configuration
 FLAGS=tf.app.flags.FLAGS
-tf.app.flags.DEFINE_float("learning_rate",0.002,"learning rate")
-tf.app.flags.DEFINE_integer("batch_size", 128, "Batch size for training/evaluating.") #批处理的大小 32-->128
+tf.app.flags.DEFINE_float("learning_rate",0.001,"learning rate")
+tf.app.flags.DEFINE_integer("batch_size", 32, "Batch size for training/evaluating.") #批处理的大小 32-->128
 tf.app.flags.DEFINE_integer("decay_steps", 6000, "how many steps before decay learning rate.") #6000批处理的大小 32-->128
 tf.app.flags.DEFINE_float("decay_rate", 0.99, "Rate of decay for learning rate.") #0.87一次衰减多少
 tf.app.flags.DEFINE_string("ckpt_dir","ckpt_ai_challenger_translation/","checkpoint location for the model")
 tf.app.flags.DEFINE_integer("sequence_length",30,"max sentence length") #100
 tf.app.flags.DEFINE_integer("decoder_sent_length",30,"max sentence length") #100
 
-tf.app.flags.DEFINE_integer("embed_size",128,"embedding size")
+tf.app.flags.DEFINE_integer("embed_size",256,"embedding size")
 tf.app.flags.DEFINE_boolean("is_training",True,"is traning.true:tranining,false:testing/inference")
 tf.app.flags.DEFINE_integer("num_epochs",20,"number of epochs to run.")
 tf.app.flags.DEFINE_integer("validate_step", 6000, "how many step to validate.") #1000做一次检验
 tf.app.flags.DEFINE_boolean("use_embedding",True,"whether to use embedding or not.")
 tf.app.flags.DEFINE_string("word2vec_model_path","./data/ai_challenger_translation.bin-128","word2vec's vocabulary and vectors") #zhihu-word2vec.bin-100-->zhihu-word2vec-multilabel-minicount15.bin-100
-tf.app.flags.DEFINE_integer("hidden_size",128,"hidden size")
+tf.app.flags.DEFINE_integer("hidden_size",256,"hidden size")
 tf.app.flags.DEFINE_float("l2_lambda", 0.0001, "l2 regularization")
 tf.app.flags.DEFINE_integer("vocabulary_size_en",60000,"vocabulary size of english") #100000
 tf.app.flags.DEFINE_integer("vocabulary_size_cn",100000,"vocabulary size of chinese") #100000
@@ -60,6 +60,7 @@ def main(_):
     #4. print sample data
     print("trainX:", trainX[0:10]);print("trainY_input:",trainY_input[0:10]);print("trainY_output:",trainY_output[0:10])
     print("testX:", testX[0:10]);print("testY_input:",testY_input[0:10]);print("testY_output:",testY_output[0:10])
+    sequence_length_batch = [FLAGS.sequence_length] * FLAGS.batch_size
     # PART1############################################PREPARE DATA FOR TRAINING#############################################
     # PART2############################################TRAINING#############################################################
     # 2.create session.
@@ -69,7 +70,7 @@ def main(_):
         # Instantiate Model
         model = seq2seq_attention_model(len(vocab_cn), FLAGS.learning_rate, FLAGS.batch_size, FLAGS.decay_steps,
                                         FLAGS.decay_rate, FLAGS.sequence_length, len(vocab_en), FLAGS.embed_size,
-                                        FLAGS.hidden_size, FLAGS.is_training,decoder_sent_length=FLAGS.decoder_sent_length, l2_lambda=FLAGS.l2_lambda)
+                                        FLAGS.hidden_size, sequence_length_batch,FLAGS.is_training,decoder_sent_length=FLAGS.decoder_sent_length, l2_lambda=FLAGS.l2_lambda)
         # Initialize Save
         saver = tf.train.Saver()
         if os.path.exists(FLAGS.ckpt_dir + "checkpoint"):

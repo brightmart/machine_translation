@@ -15,16 +15,16 @@ from a1_preprocess import preprocess_english_file
 #configuration
 FLAGS=tf.app.flags.FLAGS
 tf.app.flags.DEFINE_float("learning_rate",0.01,"learning rate")
-tf.app.flags.DEFINE_integer("batch_size", 400, "Batch size for training/evaluating.") #批处理的大小 32-->128
+tf.app.flags.DEFINE_integer("batch_size", 400, "Batch size for training/evaluating.") #400 批处理的大小 32-->128
 tf.app.flags.DEFINE_integer("decay_steps", 6000, "how many steps before decay learning rate.") #6000批处理的大小 32-->128
 tf.app.flags.DEFINE_float("decay_rate", 1.0, "Rate of decay for learning rate.") #0.87一次衰减多少
 tf.app.flags.DEFINE_string("ckpt_dir","ckpt_ai_challenger_translation/","checkpoint location for the model")
 tf.app.flags.DEFINE_integer("sequence_length",30,"max sentence length")
 tf.app.flags.DEFINE_integer("decoder_sent_length",30,"length of decoder inputs")
-tf.app.flags.DEFINE_integer("embed_size",128,"embedding size")
+tf.app.flags.DEFINE_integer("embed_size",256,"embedding size")
 tf.app.flags.DEFINE_boolean("is_training",False,"is traning.true:tranining,false:testing/inference")
 tf.app.flags.DEFINE_boolean("use_embedding",True,"whether to use embedding or not.")
-tf.app.flags.DEFINE_integer("hidden_size",128,"hidden size")
+tf.app.flags.DEFINE_integer("hidden_size",256,"hidden size")
 tf.app.flags.DEFINE_float("l2_lambda", 0.0001, "l2 regularization")
 tf.app.flags.DEFINE_string("predict_target_file","ckpt_ai_challenger_translation/s2q_attention.csv","target file path for final prediction")
 tf.app.flags.DEFINE_string("data_en_test_path",'./data/test_a_20170923.sgm',"target file path for final prediction")
@@ -43,6 +43,7 @@ def main(_):
     test=load_test_data(FLAGS.data_en_test_processed_path, vocab_en, FLAGS.decoder_sent_length)
     print("test[0:10]:",test[0:10])
     test = pad_sequences(test, maxlen=FLAGS.sequence_length, value=0.)  # padding to max length
+    sequence_length_batch = [FLAGS.sequence_length] * FLAGS.batch_size
 
     #2.create session,model,feed data to make a prediction
     config=tf.ConfigProto()
@@ -50,7 +51,7 @@ def main(_):
     with tf.Session(config=config) as sess:
         model = seq2seq_attention_model(len(vocab_cn), FLAGS.learning_rate, FLAGS.batch_size, FLAGS.decay_steps,
                                         FLAGS.decay_rate, FLAGS.sequence_length, len(vocab_en), FLAGS.embed_size,
-                                        FLAGS.hidden_size, FLAGS.is_training,decoder_sent_length=FLAGS.decoder_sent_length,
+                                        FLAGS.hidden_size, sequence_length_batch,FLAGS.is_training,decoder_sent_length=FLAGS.decoder_sent_length,
                                         l2_lambda=FLAGS.l2_lambda,use_beam_search=FLAGS.use_beam_search)
         saver=tf.train.Saver()
         if os.path.exists(FLAGS.ckpt_dir+"checkpoint"):
@@ -64,9 +65,10 @@ def main(_):
         print("number_of_test_data:", number_of_test_data)
         index = 0
         predict_target_file_f = codecs.open(FLAGS.predict_target_file, 'a', 'utf8')
-        decoder_input=np.array([vocab_cn[_GO]] + [vocab_cn[_PAD]] * (FLAGS.decoder_sent_length - 1))
+        decoder_input=np.array([[vocab_cn[_GO]] + [vocab_cn[_PAD]] * (FLAGS.decoder_sent_length - 1)]*FLAGS.batch_size)
+        print("decoder_input:", decoder_input.shape)
         decoder_input = np.reshape(decoder_input, [-1, FLAGS.decoder_sent_length])
-
+        print("decoder_input:",decoder_input.shape)
         vocab_cn_index2word = dict([val, key] for key, val in vocab_cn.items())
 
         for start, end in zip(range(0, number_of_test_data, FLAGS.batch_size),range(FLAGS.batch_size, number_of_test_data + 1, FLAGS.batch_size)):
