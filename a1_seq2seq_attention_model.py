@@ -59,6 +59,9 @@ class seq2seq_attention_model:
         # 2.encode with bi-directional GRU
         fw_cell =tf.nn.rnn_cell.BasicLSTMCell(self.hidden_size, state_is_tuple=True) #rnn_cell.LSTMCell
         bw_cell =tf.nn.rnn_cell.BasicLSTMCell(self.hidden_size, state_is_tuple=True)
+
+        #fw_cell = tf.contrib.rnn.DropoutWrapper(fw_cell, output_keep_prob=self.dropout_keep_prob)
+        #bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=self.dropout_keep_prob)
         bi_outputs, bi_state = tf.nn.bidirectional_dynamic_rnn(fw_cell, bw_cell, embedded_words, dtype=tf.float32,#sequence_length: size `[batch_size]`,containing the actual lengths for each of the sequences in the batch
                                                           sequence_length=self.sequence_length_batch, time_major=False, swap_memory=True)
         encode_outputs=tf.concat([bi_outputs[0],bi_outputs[1]],-1) #should be:[None, self.sequence_length,self.hidden_size*2]
@@ -75,6 +78,9 @@ class seq2seq_attention_model:
         outputs, final_state = rnn_decoder_with_attention(decoder_inputs, initial_state, cell,loop_function, encode_outputs,self.hidden_size,scope=None)  # A list.length:decoder_sent_length.each element is:[batch_size x output_size]
         decoder_output = tf.stack(outputs, axis=1)  # decoder_output:[batch_size,decoder_sent_length,hidden_size]
         decoder_output = tf.reshape(decoder_output, shape=(-1, self.hidden_size))  # decoder_output:[batch_size*decoder_sent_length,hidden_size]
+
+        #decoder_output=self.layer_normalization(decoder_output) #layer normalization
+
         with tf.name_scope("dropout"): #dropout as regularization
             decoder_output = tf.nn.dropout(decoder_output,keep_prob=self.dropout_keep_prob)  # shape:[-1,hidden_size]
         # 4. get logits
@@ -83,6 +89,24 @@ class seq2seq_attention_model:
             logits = tf.matmul(decoder_output, self.W_projection) + self.b_projection  # logits shape:[batch_size*decoder_sent_length,self.num_classes]==tf.matmul([batch_size*decoder_sent_length,hidden_size*2],[hidden_size*2,self.num_classes])
             logits=tf.reshape(logits,shape=(self.batch_size,self.decoder_sent_length,self.num_classes)) #logits shape:[batch_size,decoder_sent_length,self.num_classes]
         return logits
+
+    # layer normalize the tensor x, averaging over the last dimension.
+    def layer_normalization(self,x):
+        """
+        x should be:[batch_size,sequence_length,d_model]
+        :return:
+        """
+        filter=x.get_shape()[-1] #last dimension of x. e.g. 512
+        with tf.variable_scope("layer_normalization"):
+            # 1. normalize input by using  mean and variance according to last dimension
+            mean=tf.reduce_mean(x,axis=-1,keep_dims=True) #[batch_size,sequence_length,1]
+            variance=tf.reduce_mean(tf.square(x-mean),axis=-1,keep_dims=True) #[batch_size,sequence_length,1]
+            norm_x=(x-mean)*tf.rsqrt(variance+1e-6) #[batch_size,sequence_length,d_model]
+            # 2. re-scale normalized input back
+            scale=tf.get_variable("layer_norm_scale",[filter],initializer=tf.ones_initializer) #[filter]
+            bias=tf.get_variable("layer_norm_bias",[filter],initializer=tf.ones_initializer) #[filter]
+            output=norm_x*scale+bias #[batch_size,sequence_length,d_model]
+            return output #[batch_size,sequence_length,d_model]
 
     def loss_seq2seq(self):
         with tf.name_scope("loss"):
@@ -129,7 +153,7 @@ def train():
     embed_size = 1000 #100
     hidden_size = 1000
     is_training = True
-    dropout_keep_prob = 1  # 0.5 #num_sentences
+    dropout_keep_prob = 0.5  # 0.5 #num_sentences
     decoder_sent_length=6
     l2_lambda=0.0001
     sequence_length_batch=[sequence_length]*batch_size
@@ -166,8 +190,8 @@ def predict():
     decay_rate = 0.9
     sequence_length = 5
     vocab_size = 300
-    embed_size = 1000
-    hidden_size = 1000
+    embed_size = 100
+    hidden_size = 100
     is_training = False #THIS IS DIFFERENT FROM TRAIN()
     dropout_keep_prob = 1
     decoder_sent_length = 6
@@ -197,5 +221,5 @@ def get_unique_labels():
     random.shuffle(x)
     return x
 
-#train()
+train()
 #predict()
