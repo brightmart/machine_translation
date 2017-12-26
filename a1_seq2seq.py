@@ -255,5 +255,5 @@ def weighted_sum(attention_weights,encode_source_states):
     """
     attention_weights=tf.expand_dims(attention_weights,axis=-1)      #[batch_size x sequence_length x 1]
     weighted_sum=tf.multiply(attention_weights,encode_source_states) #[batch_size x sequence_length x attn_size]
-    weighted_sum=tf.reduce_sum(weighted_sum,axis=-1)                 #[batch_size x attn_size]
+    weighted_sum=tf.reduce_sum(weighted_sum,axis=1)                 #[batch_size x attn_size]
     return weighted_sum                                              #[batch_size x attn_size]
